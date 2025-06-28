@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Parqueo T3 - Panel de Control</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://media.ingenieria.usac.edu.gt/icons/favicon/favicon-16x16.png">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="app-branding">
+                    <img src="https://portal.ingenieria.usac.edu.gt/images/logo_facultad/logo-blanco-fiusac.png" class="logo_facultad" alt="Logo Fiusac">
+                    <div>
+                        <h1>Sistema de Parqueo T3</h1>
+                        <p>Panel de Control de Seguridad</p>
+                    </div>
+                </div>
+                <div class="last-activity-display">
+                    <span>Última actividad</span>
+                    <span class="activity-time" id="last-activity-time">Cargando...</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <section class="card parking-status-card">
+                <h2 class="card-title"><i class="fas fa-chart-bar icon-title"></i> Estado del Parqueo</h2>
+                <div class="status-metrics">
+                    <div class="metric-item free-spaces">
+                        <span class="metric-value" id="free-spaces-number">0</span>
+                        <span class="metric-label">Espacios Libres</span>
+                        <i class="fas fa-car-alt icon-metric icon-green"></i>
+                    </div>
+                    <div class="metric-item occupied-spaces">
+                        <span class="metric-value" id="occupied-spaces-number">0</span>
+                        <span class="metric-label">Espacios Ocupados</span>
+                        <i class="fas fa-parking icon-metric icon-red"></i>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card parking-view-card">
+                <h2 class="card-title"><i class="fas fa-map-marked-alt icon-title"></i> Vista del Parqueo</h2>
+                <div class="parking-slots" id="parking-slots-container"></div>
+            </section>
+
+            <section class="card gate-status-card">
+                <h2 class="card-title"><i class="fas fa-door-open icon-title"></i> Estado de Garitas</h2>
+                <div class="gate-info-wrapper">
+                    <div class="gate-info-item">
+                        <span class="gate-name">Garita de Entrada</span>
+                        <span class="gate-status" id="entry-gate-status"><i class="fas fa-check-circle"></i> Operativa</span>
+                    </div>
+                    <div class="gate-info-item">
+                        <span class="gate-name">Garita de Salida</span>
+                        <span class="gate-status" id="exit-gate-status"><i class="fas fa-check-circle"></i> Operativa</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card system-info-card">
+                <h2 class="card-title"><i class="fas fa-info-circle icon-title"></i> Información del Sistema</h2>
+                <div class="info-details">
+                    <div class="detail-item">
+                        <span>Capacidad Total:</span>
+                        <span id="total-capacity">0 espacios</span>
+                    </div>
+                    <div class="detail-item">
+                        <span>Ocupación:</span>
+                        <span id="occupancy-percentage">0%</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card emergency-control-card">
+                <h2 class="card-title"><i class="fas fa-exclamation-triangle icon-title icon-red"></i> Control de Modos</h2>
+                <div class="mode-buttons">
+                    <button class="mode-button" id="panic-button" data-mode="panic"><i class="fas fa-siren"></i> Modo Pánico</button>
+                    <button class="mode-button" id="nocturnal-button" data-mode="nocturnal"><i class="fas fa-moon"></i> Modo Nocturno</button>
+                    <button class="mode-button" id="maintenance-button" data-mode="maintenance"><i class="fas fa-tools"></i> Modo Mantenimiento</button>
+                    <button class="mode-button" id="evacuation-button" data-mode="evacuation"><i class="fas fa-person-running"></i> Modo Evacuación</button>
+                </div>
+                <p class="mode-description">Activa un modo para bloquear operaciones del parqueo.</p>
+            </section>
+
+            <section class="card stats-card">
+                <h2 class="card-title"><i class="fas fa-chart-line icon-title"></i> Estadísticas de Parqueo</h2>
+                <div class="stats-content">
+                    <div class="stats-item">
+                        <span>Promedio de carros por hora:</span>
+                        <span id="average-cars">0</span>
+                    </div>
+                    <canvas id="parking-chart" width="400" height="200"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="mode-overlay" class="mode-overlay hidden">
+        <h2><i class="fas fa-exclamation-circle"></i> <span id="mode-overlay-title">MODO ACTIVO</span></h2>
+        <p id="mode-overlay-description">El sistema de parqueo está bloqueado por seguridad.</p>
+        <p>Introduce la contraseña para volver al modo normal:</p>
+        <input type="password" id="mode-password" placeholder="Contraseña de desbloqueo">
+        <button id="unlock-button">Desbloquear</button>
+        <p id="mode-message" style="color: #ff9900; margin-top: 10px;"></p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const sseUrl = 'http://localhost:3000/api/parking-stream';
+            const modeControlUrl = 'http://localhost:3000/api/mode-control';
+            const statsUrl = 'http://localhost:3000/api/parking-stats';
+
+            const freeSpacesElement = document.getElementById('free-spaces-number');
+            const occupiedSpacesElement = document.getElementById('occupied-spaces-number');
+            const totalCapacityElement = document.getElementById('total-capacity');
+            const occupancyPercentageElement = document.getElementById('occupancy-percentage');
+            const parkingSlotsContainer = document.getElementById('parking-slots-container');
+            const lastActivityTimeElement = document.getElementById('last-activity-time');
+            const modeButtons = document.querySelectorAll('.mode-button');
+            const modeOverlay = document.getElementById('mode-overlay');
+            const modeOverlayTitle = document.getElementById('mode-overlay-title');
+            const modeOverlayDescription = document.getElementById('mode-overlay-description');
+            const modePasswordInput = document.getElementById('mode-password');
+            const unlockButton = document.getElementById('unlock-button');
+            const modeMessage = document.getElementById('mode-message');
+            const averageCarsElement = document.getElementById('average-cars');
+            const entryGateStatus = document.getElementById('entry-gate-status');
+            const exitGateStatus = document.getElementById('exit-gate-status');
+
+            let eventSource = null;
+            let chart = null;
+            let currentMode = 'normal';
+
+            // Inicializar gráfica con Chart.js
+            function initializeChart() {
+                try {
+                    const ctx = document.getElementById('parking-chart').getContext('2d');
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: [{
+                                label: 'Espacios Ocupados',
+                                data: [],
+                                borderColor: 'blue',
+                                fill: false
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                x: { 
+                                    type: 'time', 
+                                    time: { unit: 'minute' },
+                                    adapters: {
+                                        date: {
+                                            locale: dateFnsLocales.es
+                                        }
+                                    }
+                                },
+                                y: { 
+                                    beginAtZero: true, 
+                                    title: { display: true, text: 'Espacios Ocupados' },
+                                    ticks: { stepSize: 1 }
+                                }
+                            }
+                        }
+                    });
+                    console.log('Gráfica inicializada correctamente');
+                } catch (error) {
+                    console.error('Error al inicializar la gráfica:', error);
+                    chart = null; // Evitar fallos posteriores si la gráfica no se inicializa
+                }
+            }
+
+            // Actualizar UI con datos de parqueo
+            function updateUI(data) {
+                freeSpacesElement.textContent = data.free_spaces || 0;
+                occupiedSpacesElement.textContent = data.occupied_spaces || 0;
+                totalCapacityElement.textContent = `${data.total_capacity || 0} espacios`;
+                occupancyPercentageElement.textContent = `${data.occupancy_percentage || 0}%`;
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                lastActivityTimeElement.textContent = timeString;
+                renderParkingSlots(data.spaces_status || {});
+                updateChartData(data.occupied_spaces || 0);
+            }
+
+            // Renderizar slots de parqueo
+            function renderParkingSlots(spacesStatus) {
+                parkingSlotsContainer.innerHTML = '';
+                for (const slotKey in spacesStatus) {
+                    if (spacesStatus.hasOwnProperty(slotKey)) {
+                        const isOccupied = spacesStatus[slotKey];
+                        const slotDiv = document.createElement('div');
+                        slotDiv.classList.add('slot');
+                        slotDiv.id = `slot-${slotKey}`;
+                        const slotNumber = slotKey.toUpperCase();
+                        if (isOccupied) {
+                            slotDiv.classList.add('occupied');
+                            slotDiv.innerHTML = `<i class="fas fa-car car-icon-small"></i><span>${slotNumber} Ocupado</span>`;
+                        } else {
+                            slotDiv.classList.add('free');
+                            slotDiv.innerHTML = `<span>${slotNumber} Libre</span>`;
+                        }
+                        parkingSlotsContainer.appendChild(slotDiv);
+                    }
+                }
+            }
+
+            // Actualizar datos de la gráfica
+            function updateChartData(occupied) {
+                if (!chart) return;
+                try {
+                    const now = new Date();
+                    chart.data.datasets[0].data.push({ x: now, y: occupied });
+                    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                    chart.data.datasets[0].data = chart.data.datasets[0].data.filter(d => d.x >= oneDayAgo);
+                    chart.update();
+                    console.log('Gráfica actualizada con nuevos datos');
+                } catch (error) {
+                    console.error('Error al actualizar la gráfica:', error);
+                }
+            }
+
+            // Cargar estadísticas iniciales
+            async function loadStats() {
+                try {
+                    const response = await fetch(statsUrl);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    averageCarsElement.textContent = data.average_cars_per_hour || 'N/A';
+                    if (chart && data.chart_data) {
+                        chart.data.datasets[0].data = data.chart_data.map(d => ({
+                            x: new Date(d.timestamp),
+                            y: d.occupied
+                        }));
+                        chart.update();
+                        console.log('Estadísticas cargadas correctamente');
+                    }
+                } catch (error) {
+                    console.error('Error al cargar estadísticas:', error);
+                    averageCarsElement.textContent = 'N/A';
+                }
+            }
+
+            // Actualizar estado de las garitas según el modo
+            function updateGateStatus(mode) {
+                try {
+                    if (mode === 'normal') {
+                        entryGateStatus.innerHTML = '<i class="fas fa-check-circle"></i> Operativa';
+                        entryGateStatus.className = 'gate-status operative';
+                        exitGateStatus.innerHTML = '<i class="fas fa-check-circle"></i> Operativa';
+                        exitGateStatus.className = 'gate-status operative';
+                    } else if (mode === 'panic') {
+                        entryGateStatus.innerHTML = '<i class="fas fa-times-circle"></i> Inactiva';
+                        entryGateStatus.className = 'gate-status inactive';
+                        exitGateStatus.innerHTML = '<i class="fas fa-times-circle"></i> Inactiva';
+                        exitGateStatus.className = 'gate-status inactive';
+                        modeOverlayDescription.textContent = 'El sistema está bloqueado. Alarmas activadas.';
+                    } else if (mode === 'nocturnal') {
+                        entryGateStatus.innerHTML = '<i class="fas fa-times-circle"></i> Inactiva';
+                        entryGateStatus.className = 'gate-status inactive';
+                        exitGateStatus.innerHTML = '<i class="fas fa-times-circle"></i> Inactiva';
+                        exitGateStatus.className = 'gate-status inactive';
+                        modeOverlayDescription.textContent = 'El sistema está bloqueado. Sin alarmas.';
+                    } else if (mode === 'maintenance') {
+                        entryGateStatus.innerHTML = '<i class="fas fa-times-circle"></i> Inactiva';
+                        entryGateStatus.className = 'gate-status inactive';
+                        exitGateStatus.innerHTML = '<i class="fas fa-check-circle"></i> Operativa';
+                        exitGateStatus.className = 'gate-status operative';
+                        modeOverlayDescription.textContent = 'Entrada bloqueada, salida permitida.';
+                    } else if (mode === 'evacuation') {
+                        entryGateStatus.innerHTML = '<i class="fas fa-door-open"></i> Abierta';
+                        entryGateStatus.className = 'gate-status open';
+                        exitGateStatus.innerHTML = '<i class="fas fa-door-open"></i> Abierta';
+                        exitGateStatus.className = 'gate-status open';
+                        modeOverlayDescription.textContent = 'Ambas talanqueras abiertas. Alarmas activadas.';
+                    }
+                    console.log(`Estado de garitas actualizado para modo ${mode}`);
+                } catch (error) {
+                    console.error('Error al actualizar estado de garitas:', error);
+                }
+            }
+
+            // Activar un modo
+            async function activateMode(mode) {
+                if (currentMode !== 'normal') {
+                    alert(`No se puede cambiar directamente a ${mode}. Primero desactiva el modo actual (${currentMode}) para volver a normal.`);
+                    console.log(`Intento de cambio directo a ${mode} bloqueado, modo actual: ${currentMode}`);
+                    return;
+                }
+                try {
+                    console.log(`Enviando solicitud para activar modo ${mode}`);
+                    const response = await fetch(modeControlUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'activate', mode })
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const data = await response.json();
+                    console.log('Respuesta del servidor al activar modo:', data);
+                    if (data.success) {
+                        console.log(`Modo ${mode} activado desde frontend. Actualizando UI...`);
+                        setModeUI(mode); // Actualizar UI inmediatamente
+                    } else {
+                        console.error(`Error al activar modo ${mode}: ${data.message}`);
+                        alert(`Error al activar modo ${mode}: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error(`Error al activar modo ${mode}:`, error);
+                    alert(`No se pudo comunicar con el servidor para activar el modo: ${error.message}`);
+                }
+            }
+
+            // Desactivar modo y volver a normal
+            async function deactivateMode(password) {
+                modeMessage.textContent = 'Verificando contraseña...';
+                try {
+                    console.log('Enviando solicitud para desactivar modo');
+                    const response = await fetch(modeControlUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'deactivate', password })
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const data = await response.json();
+                    console.log('Respuesta del servidor al desactivar modo:', data);
+                    if (data.success) {
+                        console.log('Modo normal restaurado desde frontend.');
+                        modeMessage.textContent = '';
+                        setModeUI('normal');
+                    } else {
+                        console.error(`Error al desactivar modo: ${data.message}`);
+                        modeMessage.textContent = `Error: ${data.message}`;
+                    }
+                } catch (error) {
+                    console.error('Error al desactivar modo:', error);
+                    modeMessage.textContent = `Error de conexión con el servidor: ${error.message}`;
+                }
+            }
+
+            // Actualizar UI según el modo
+            function setModeUI(mode) {
+                try {
+                    console.log(`Actualizando UI para modo: ${mode}`);
+                    currentMode = mode;
+                    updateGateStatus(mode);
+                    if (mode !== 'normal') {
+                        modeOverlay.classList.remove('hidden');
+                        document.body.classList.add('mode-active');
+                        modeOverlayTitle.textContent = `MODO ${mode.toUpperCase()} ACTIVO`;
+                        lastActivityTimeElement.textContent = `MODO ${mode.toUpperCase()}`;
+                        localStorage.setItem('systemMode', mode);
+                        parkingSlotsContainer.innerHTML = `<div class="slot inactive"><span>SISTEMA EN MODO ${mode.toUpperCase()}</span></div>`;
+                        averageCarsElement.textContent = 'N/A';
+                        if (chart) {
+                            try {
+                                chart.data.datasets[0].data = [];
+                                chart.update();
+                                console.log('Gráfica limpiada para modo especial');
+                            } catch (error) {
+                                console.error('Error al limpiar la gráfica:', error);
+                            }
+                        }
+                        modeButtons.forEach(button => {
+                            button.disabled = true;
+                        });
+                    } else {
+                        modeOverlay.classList.add('hidden');
+                        document.body.classList.remove('mode-active');
+                        localStorage.removeItem('systemMode');
+                        modePasswordInput.value = '';
+                        modeMessage.textContent = '';
+                        loadStats();
+                        modeButtons.forEach(button => {
+                            button.disabled = false;
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error al actualizar UI para modo:', error);
+                    lastActivityTimeElement.textContent = 'Error al actualizar UI';
+                }
+            }
+
+            // Iniciar conexión SSE
+            function startSSEConnection() {
+                if (eventSource && eventSource.readyState !== EventSource.CLOSED) {
+                    console.log('Conexión SSE ya activa.');
+                    return;
+                }
+                if (localStorage.getItem('systemMode') !== 'normal' && localStorage.getItem('systemMode')) {
+                    console.log(`Modo ${localStorage.getItem('systemMode')} activo en localStorage. No se inicia SSE.`);
+                    setModeUI(localStorage.getItem('systemMode'));
+                    return;
+                }
+
+                console.log('Iniciando conexión SSE...');
+                eventSource = new EventSource(sseUrl);
+
+                eventSource.onopen = function() {
+                    console.log('Conexión SSE establecida.');
+                    lastActivityTimeElement.textContent = 'Conectado...';
+                };
+
+                eventSource.onmessage = function(event) {
+                    console.log('Mensaje SSE recibido:', event.data);
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data && !data.mode) {
+                            updateUI(data);
+                        }
+                    } catch (e) {
+                        console.error('Error al parsear mensaje SSE:', e);
+                    }
+                };
+
+                eventSource.addEventListener('modeStatus', function(event) {
+                    console.log('Evento modeStatus recibido:', event.data);
+                    try {
+                        const status = JSON.parse(event.data);
+                        if (status.mode) {
+                            setModeUI(status.mode);
+                            lastActivityTimeElement.textContent = `MODO ${status.mode.toUpperCase()}`;
+                        } else {
+                            console.error('Evento modeStatus sin modo válido:', status);
+                        }
+                    } catch (e) {
+                        console.error('Error al parsear modeStatus:', e);
+                    }
+                });
+
+                eventSource.onerror = function(error) {
+                    console.error('Error en conexión SSE:', error);
+                    if (eventSource.readyState === EventSource.CLOSED) {
+                        console.log('Conexión SSE cerrada. Reintentando en 3 segundos...');
+                        eventSource = null;
+                        setTimeout(startSSEConnection, 3000);
+                    }
+                    if (!localStorage.getItem('systemMode')) {
+                        lastActivityTimeElement.textContent = 'Error de conexión SSE. Reintentando...';
+                    } else {
+                        lastActivityTimeElement.textContent = `MODO ${localStorage.getItem('systemMode').toUpperCase()}`;
+                    }
+                };
+            }
+
+            // Inicializar estado del modo
+            async function initializeModeState() {
+                try {
+                    console.log('Consultando estado inicial del modo');
+                    const response = await fetch(modeControlUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'status' })
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const data = await response.json();
+                    console.log('Estado inicial del modo:', data);
+                    if (data.mode && data.mode !== 'normal') {
+                        setModeUI(data.mode);
+                        lastActivityTimeElement.textContent = `MODO ${data.mode.toUpperCase()}`;
+                    } else {
+                        setModeUI('normal');
+                        startSSEConnection();
+                        loadStats();
+                    }
+                } catch (error) {
+                    console.error('Error al obtener estado inicial del modo:', error);
+                    lastActivityTimeElement.textContent = 'Error de comunicación con el servidor.';
+                    setModeUI('normal');
+                    startSSEConnection();
+                }
+            }
+
+            // Event listeners para los botones de modo
+            modeButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const mode = button.getAttribute('data-mode');
+                    console.log(`Botón de modo ${mode} presionado`);
+                    activateMode(mode);
+                });
+            });
+
+            unlockButton.addEventListener('click', () => {
+                const password = modePasswordInput.value;
+                if (password) {
+                    console.log('Intentando desactivar modo con contraseña');
+                    deactivateMode(password);
+                } else {
+                    modeMessage.textContent = 'Por favor, introduce la contraseña.';
+                }
+            });
+
+            modePasswordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    unlockButton.click();
+                }
+            });
+
+            initializeChart();
+            initializeModeState();
+        });
+    </script>
+</body>
+</html>
